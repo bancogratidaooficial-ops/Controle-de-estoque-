@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Controle de Estoque</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffcc00">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
 <style>
 *{box-sizing:border-box;}
 body{
@@ -12,10 +15,10 @@ body{
   color:#fff;
   font-family:Arial, sans-serif;
   padding:10px;
-  padding-top: 110px; /* espaço para a chave fixa */
+  padding-top: 115px;
 }
 
-/* Chave fixa no topo — NÃO SOME */
+/* Chave fixa — NÃO SOME */
 .barra-fixa{
   position:fixed;
   top:0;
@@ -34,20 +37,22 @@ body{
 .chave-fixa{
   font-weight:bold;
   color:#ffcc00;
-  font-size:16px;
+  font-size:15px;
 }
 .area-botoes-topo{
   display:flex;
-  gap:6px;
+  gap:5px;
   flex-wrap:wrap;
 }
 .area-botoes-topo button{
-  padding:6px 10px;
+  padding:7px 10px;
   border:none;
   border-radius:6px;
   font-weight:bold;
   cursor:pointer;
+  font-size:13px;
 }
+.btn-backup{background:#00ccff; color:#000;}
 .btn-restaurar{background:#00ff88; color:#000;}
 .btn-compartilhar{background:#0088ff; color:#fff;}
 .btn-convidar{background:#ffcc00; color:#000;}
@@ -75,11 +80,10 @@ header a{color:#ffcc00; text-decoration:none; font-weight:bold;}
 .topInfo{
   display:flex;
   justify-content:space-between;
-  text-align:center;
-  color:#ffcc00;
-  font-weight:bold;
   flex-wrap:wrap;
   gap:6px;
+  color:#ffcc00;
+  font-weight:bold;
 }
 
 input{
@@ -105,6 +109,7 @@ input{
   margin-top:6px;
   cursor:pointer;
 }
+.addBtn{background:#ffcc00; color:#000;}
 .item{
   background:#1e1e1e;
   padding:10px;
@@ -116,8 +121,8 @@ input{
   flex-wrap:wrap;
   gap:8px;
 }
-.item .dados{flex:1; min-width:200px;}
-.item .botoes{display:flex; gap:6px; align-items:center;}
+.item.dados{flex:1; min-width:200px;}
+.item.botoes{display:flex; gap:6px; align-items:center;}
 .btn-qtd{
   width:36px; height:36px;
   border-radius:6px;
@@ -137,16 +142,16 @@ input{
   cursor:pointer;
   font-size:16px;
 }
-.addBtn{background:#ffcc00; color:#000;}
 </style>
 </head>
 <body>
 
-<!-- CHAVE FIXA — SEMPRE VISÍVEL -->
+<!-- CHAVE FIXA + TODOS OS BOTÕES -->
 <div class="barra-fixa">
   <div class="chave-fixa">🔑 Chave: ESTOQUE-2026-PR</div>
   <div class="area-botoes-topo">
-    <button class="btn-restaurar" onclick="restaurarEstoque()">♻️ Restaurar</button>
+    <button class="btn-backup" onclick="fazerBackup()">💾 Backup</button>
+    <button class="btn-restaurar" onclick="restaurarArquivo()">♻️ Restaurar</button>
     <button class="btn-compartilhar" onclick="compartilhar()">🔗 Compartilhar</button>
     <button class="btn-convidar" onclick="convidar()">👤 Convidar</button>
   </div>
@@ -154,7 +159,7 @@ input{
 
 <header>
   <a href="index.html">◀ Voltar</a>
-  <h3 style="margin:0;">📦 Estoque</h3>
+  <h3 style="margin:0;">📦 Controle de Estoque</h3>
   <button onclick="exportar()" style="background:#00ff88;border:none;padding:6px 10px;border-radius:8px;font-weight:bold;cursor:pointer;">📤 Exportar</button>
 </header>
 
@@ -181,11 +186,22 @@ input{
 
 <div class="box" id="lista"></div>
 
+<!-- Input oculto para restaurar -->
+<input type="file" id="inputRestaurar" accept=".json" style="display:none" onchange="processarRestaurar(event)">
+
 <script>
 const CHAVE_STORAGE = 'estoque_v2_dados';
 let estoque = [];
 
-// Carregar ao abrir
+// Registrar Service Worker — vira app!
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('✅ SW registrado', reg))
+      .catch(err => console.log('❌ SW erro', err));
+  });
+}
+
 carregar();
 
 function adicionar(){
@@ -200,14 +216,9 @@ function adicionar(){
     return;
   }
 
-  estoque.unshift({
-    id: Date.now(),
-    nome, qtd, min, preco, local
-  });
-  salvar();
-  renderizar();
+  estoque.unshift({id: Date.now(), nome, qtd, min, preco, local});
+  salvar(); renderizar();
   
-  // Limpar campos
   document.getElementById('nome').value = '';
   document.getElementById('qtd').value = '1';
   document.getElementById('preco').value = '';
@@ -219,15 +230,13 @@ function alterarQtd(id, delta){
   if(!item) return;
   item.qtd += delta;
   if(item.qtd < 0) item.qtd = 0;
-  salvar();
-  renderizar();
+  salvar(); renderizar();
 }
 
 function excluir(id){
-  if(confirm('🗑️ Apagar este produto do estoque?')){
+  if(confirm('🗑️ Apagar este produto?')){
     estoque = estoque.filter(i => i.id !== id);
-    salvar();
-    renderizar();
+    salvar(); renderizar();
   }
 }
 
@@ -241,13 +250,47 @@ function carregar(){
   renderizar();
 }
 
-function restaurarEstoque(){
-  if(confirm('♻️ Restaurar pode trazer dados anteriores ou limpar. Continuar?')){
-    localStorage.removeItem(CHAVE_STORAGE);
-    estoque = [];
-    renderizar();
-    alert('✅ Estoque restaurado!');
-  }
+// 💾 BAIXAR BACKUP
+function fazerBackup(){
+  const dados = {
+    data: new Date().toLocaleString('pt-BR'),
+    versao: '2.0',
+    estoque: estoque
+  };
+  const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup_estoque_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  alert('✅ Backup salvo! Guarde o arquivo.');
+}
+
+// ♻️ RESTAURAR DO ARQUIVO
+function restaurarArquivo(){
+  document.getElementById('inputRestaurar').click();
+}
+
+function processarRestaurar(event){
+  const arquivo = event.target.files[0];
+  if(!arquivo) return;
+  
+  if(!confirm('⚠️ Isso substitui os dados atuais! Continuar?')) return;
+  
+  const leitor = new FileReader();
+  leitor.onload = (e) => {
+    try {
+      const dados = JSON.parse(e.target.result);
+      estoque = dados.estoque || dados;
+      salvar(); renderizar();
+      alert('✅ Restaurado com sucesso!');
+    } catch(err) {
+      alert('❌ Arquivo inválido!');
+    }
+  };
+  leitor.readAsText(arquivo);
+  event.target.value = '';
 }
 
 function exportar(){
@@ -256,37 +299,29 @@ function exportar(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'estoque_backup.json';
+  a.download = `estoque_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
 function compartilhar(){
-  const texto = `📦 Controle de Estoque — ${estoque.length} itens\nValor total: R$ ${calcularTotal().toFixed(2)}\n\n` +
+  const total = estoque.reduce((s,i)=>s+(i.qtd*i.preco),0);
+  const texto = `📦 Controle de Estoque — ${estoque.length} itens\nValor total: R$ ${total.toFixed(2)}\n\n` +
     estoque.map(i => `${i.nome}: ${i.qtd} un. | R$ ${i.preco.toFixed(2)} | ${i.local || 'Sem local'}`).join('\n');
   
-  if(navigator.share){
-    navigator.share({title:'Controle de Estoque', text:texto});
-  } else {
-    navigator.clipboard.writeText(texto);
-    alert('✅ Dados copiados! Cole onde quiser.');
-  }
+  if(navigator.share) navigator.share({title:'Estoque', text:texto});
+  else {navigator.clipboard.writeText(texto); alert('✅ Copiado!');}
 }
 
 function convidar(){
   const link = window.location.href;
-  const mensagem = `Olá! Convido você para gerenciar nosso estoque juntos: ${link}`;
-  
-  if(navigator.share){
-    navigator.share({title:'Convite — Controle de Estoque', text:mensagem});
-  } else {
-    navigator.clipboard.writeText(mensagem);
-    alert('✅ Convite copiado! Envie para a pessoa.');
-  }
+  const msg = `Olá! Gerencie nosso estoque: ${link}`;
+  if(navigator.share) navigator.share({title:'Convite', text:msg});
+  else {navigator.clipboard.writeText(msg); alert('✅ Convite copiado!');}
 }
 
 function calcularTotal(){
-  return estoque.reduce((s, i) => s + (i.qtd * i.preco), 0);
+  return estoque.reduce((s,i)=>s+(i.qtd*i.preco),0);
 }
 
 function renderizar(){
@@ -305,12 +340,12 @@ function renderizar(){
       <div class="dados">
         <strong>${i.nome}</strong><br>
         💲 R$ ${i.preco.toFixed(2)} | 📍 ${i.local || 'Não informado'}<br>
-        <small style="color:#aaa">Mínimo: ${i.min} | ${i.qtd <= i.min ? '⚠️ REPOR' : ''}</small>
+        <small style="color:#aaa">Mín: ${i.min} ${i.qtd <= i.min ? ' ⚠️ REPOR' : ''}</small>
       </div>
       <div class="botoes">
-        <button class="btn-qtd" onclick="alterarQtd(${i.id}, -1)">−</button>
-        <strong style="min-width:30px;text-align:center;">${i.qtd}</strong>
-        <button class="btn-qtd" onclick="alterarQtd(${i.id}, +1)">+</button>
+        <button class="btn-qtd" onclick="alterarQtd(${i.id},-1)">−</button>
+        <strong>${i.qtd}</strong>
+        <button class="btn-qtd" onclick="alterarQtd(${i.id},+1)">+</button>
         <button class="btn-lixeira" onclick="excluir(${i.id})">🗑️</button>
       </div>
     </div>
