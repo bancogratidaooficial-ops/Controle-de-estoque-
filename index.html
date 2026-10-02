@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Estoque</title>
+<style>
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:#0a0a0a;
+  color:#fff;
+  font-family:Arial, sans-serif;
+  padding:10px;
+  padding-top: 110px; /* espaço para a chave fixa */
+}
+
+/* Chave fixa no topo — NÃO SOME */
+.barra-fixa{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  background:#111;
+  padding:10px 15px;
+  border-bottom:2px solid #ffcc00;
+  z-index:999;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.chave-fixa{
+  font-weight:bold;
+  color:#ffcc00;
+  font-size:16px;
+}
+.area-botoes-topo{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.area-botoes-topo button{
+  padding:6px 10px;
+  border:none;
+  border-radius:6px;
+  font-weight:bold;
+  cursor:pointer;
+}
+.btn-restaurar{background:#00ff88; color:#000;}
+.btn-compartilhar{background:#0088ff; color:#fff;}
+.btn-convidar{background:#ffcc00; color:#000;}
+
+header{
+  background:#111;
+  padding:12px;
+  border-radius:12px;
+  margin:10px 0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+}
+header a{color:#ffcc00; text-decoration:none; font-weight:bold;}
+
+.box{
+  background:#111;
+  border:1px solid #222;
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:10px;
+}
+.topInfo{
+  display:flex;
+  justify-content:space-between;
+  text-align:center;
+  color:#ffcc00;
+  font-weight:bold;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+input{
+  width:100%;
+  padding:12px;
+  border-radius:8px;
+  border:1px solid #333;
+  background:#000;
+  color:#fff;
+  margin:4px 0;
+}
+.grid3{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr;
+  gap:6px;
+}
+.btn{
+  width:100%;
+  padding:12px;
+  border-radius:10px;
+  border:none;
+  font-weight:bold;
+  margin-top:6px;
+  cursor:pointer;
+}
+.item{
+  background:#1e1e1e;
+  padding:10px;
+  border-radius:10px;
+  margin:6px 0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.item .dados{flex:1; min-width:200px;}
+.item .botoes{display:flex; gap:6px; align-items:center;}
+.btn-qtd{
+  width:36px; height:36px;
+  border-radius:6px;
+  border:none;
+  font-weight:bold;
+  font-size:18px;
+  cursor:pointer;
+  background:#ffcc00;
+  color:#000;
+}
+.btn-lixeira{
+  background:#ff4444;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  padding:6px 10px;
+  cursor:pointer;
+  font-size:16px;
+}
+.addBtn{background:#ffcc00; color:#000;}
+</style>
+</head>
+<body>
+
+<!-- CHAVE FIXA — SEMPRE VISÍVEL -->
+<div class="barra-fixa">
+  <div class="chave-fixa">🔑 Chave: ESTOQUE-2026-PR</div>
+  <div class="area-botoes-topo">
+    <button class="btn-restaurar" onclick="restaurarEstoque()">♻️ Restaurar</button>
+    <button class="btn-compartilhar" onclick="compartilhar()">🔗 Compartilhar</button>
+    <button class="btn-convidar" onclick="convidar()">👤 Convidar</button>
+  </div>
+</div>
+
+<header>
+  <a href="index.html">◀ Voltar</a>
+  <h3 style="margin:0;">📦 Estoque</h3>
+  <button onclick="exportar()" style="background:#00ff88;border:none;padding:6px 10px;border-radius:8px;font-weight:bold;cursor:pointer;">📤 Exportar</button>
+</header>
+
+<div class="box">
+  <div class="topInfo">
+    <div>Itens: <span id="totalItens">0</span></div>
+    <div>Valor: R$ <span id="valorTotal">0,00</span></div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="grid3">
+    <input id="nome" placeholder="Produto: ex: Óleo 10W30">
+    <input id="qtd" type="number" placeholder="Qtd" value="1" min="1">
+    <input id="min" type="number" placeholder="Mínimo" value="2" min="0">
+  </div>
+  <div class="grid3">
+    <input id="preco" type="number" step="0.01" placeholder="Preço R$">
+    <input id="local" placeholder="Local/Gaveta">
+    <button class="btn addBtn" onclick="adicionar()">➕ Adicionar</button>
+  </div>
+  <input id="busca" placeholder="🔍 Buscar produto..." oninput="renderizar()" style="margin-top:8px;">
+</div>
+
+<div class="box" id="lista"></div>
+
+<script>
+const CHAVE_STORAGE = 'estoque_v2_dados';
+let estoque = [];
+
+// Carregar ao abrir
+carregar();
+
+function adicionar(){
+  const nome = document.getElementById('nome').value.trim();
+  const qtd = parseInt(document.getElementById('qtd').value) || 1;
+  const min = parseInt(document.getElementById('min').value) || 0;
+  const preco = parseFloat(document.getElementById('preco').value) || 0;
+  const local = document.getElementById('local').value.trim();
+
+  if(!nome || qtd <= 0){
+    alert('⚠️ Digite o nome e quantidade válida!');
+    return;
+  }
+
+  estoque.unshift({
+    id: Date.now(),
+    nome, qtd, min, preco, local
+  });
+  salvar();
+  renderizar();
+  
+  // Limpar campos
+  document.getElementById('nome').value = '';
+  document.getElementById('qtd').value = '1';
+  document.getElementById('preco').value = '';
+  document.getElementById('local').value = '';
+}
+
+function alterarQtd(id, delta){
+  const item = estoque.find(i => i.id === id);
+  if(!item) return;
+  item.qtd += delta;
+  if(item.qtd < 0) item.qtd = 0;
+  salvar();
+  renderizar();
+}
+
+function excluir(id){
+  if(confirm('🗑️ Apagar este produto do estoque?')){
+    estoque = estoque.filter(i => i.id !== id);
+    salvar();
+    renderizar();
+  }
+}
+
+function salvar(){
+  localStorage.setItem(CHAVE_STORAGE, JSON.stringify(estoque));
+}
+
+function carregar(){
+  const dados = localStorage.getItem(CHAVE_STORAGE);
+  if(dados) estoque = JSON.parse(dados);
+  renderizar();
+}
+
+function restaurarEstoque(){
+  if(confirm('♻️ Restaurar pode trazer dados anteriores ou limpar. Continuar?')){
+    localStorage.removeItem(CHAVE_STORAGE);
+    estoque = [];
+    renderizar();
+    alert('✅ Estoque restaurado!');
+  }
+}
+
+function exportar(){
+  const dados = JSON.stringify(estoque, null, 2);
+  const blob = new Blob([dados], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'estoque_backup.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function compartilhar(){
+  const texto = `📦 Controle de Estoque — ${estoque.length} itens\nValor total: R$ ${calcularTotal().toFixed(2)}\n\n` +
+    estoque.map(i => `${i.nome}: ${i.qtd} un. | R$ ${i.preco.toFixed(2)} | ${i.local || 'Sem local'}`).join('\n');
+  
+  if(navigator.share){
+    navigator.share({title:'Controle de Estoque', text:texto});
+  } else {
+    navigator.clipboard.writeText(texto);
+    alert('✅ Dados copiados! Cole onde quiser.');
+  }
+}
+
+function convidar(){
+  const link = window.location.href;
+  const mensagem = `Olá! Convido você para gerenciar nosso estoque juntos: ${link}`;
+  
+  if(navigator.share){
+    navigator.share({title:'Convite — Controle de Estoque', text:mensagem});
+  } else {
+    navigator.clipboard.writeText(mensagem);
+    alert('✅ Convite copiado! Envie para a pessoa.');
+  }
+}
+
+function calcularTotal(){
+  return estoque.reduce((s, i) => s + (i.qtd * i.preco), 0);
+}
+
+function renderizar(){
+  const busca = document.getElementById('busca').value.toLowerCase();
+  const filtro = estoque.filter(i => 
+    i.nome.toLowerCase().includes(busca) || 
+    (i.local && i.local.toLowerCase().includes(busca))
+  );
+
+  document.getElementById('totalItens').textContent = filtro.length;
+  document.getElementById('valorTotal').textContent = calcularTotal().toFixed(2);
+
+  const lista = document.getElementById('lista');
+  lista.innerHTML = filtro.map(i => `
+    <div class="item" style="${i.qtd <= i.min ? 'border-left:3px solid #ff4444;' : ''}">
+      <div class="dados">
+        <strong>${i.nome}</strong><br>
+        💲 R$ ${i.preco.toFixed(2)} | 📍 ${i.local || 'Não informado'}<br>
+        <small style="color:#aaa">Mínimo: ${i.min} | ${i.qtd <= i.min ? '⚠️ REPOR' : ''}</small>
+      </div>
+      <div class="botoes">
+        <button class="btn-qtd" onclick="alterarQtd(${i.id}, -1)">−</button>
+        <strong style="min-width:30px;text-align:center;">${i.qtd}</strong>
+        <button class="btn-qtd" onclick="alterarQtd(${i.id}, +1)">+</button>
+        <button class="btn-lixeira" onclick="excluir(${i.id})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>
